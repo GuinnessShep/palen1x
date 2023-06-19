@@ -1,0 +1,58 @@
+name: Build palen1x 2 (Nightly)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [ amd64, i686, aarch64, armv7 ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=$(cat version)" >> $GITHUB_ENV
+
+      - name: Install qemu-user-static
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static
+
+      - name: Build
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          sudo -E ./build.sh NIGHTLY
+
+      - name: Prepare artifact
+        run: |
+          mkdir palen1x
+          cp work/*-${{ matrix.arch }}.iso palen1x
+          cp work/iso/boot/initramfs.xz palen1x/initramfs-${{ matrix.arch }}.xzv
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GUINNESS_TOKEN }}
+        with:
+          tag_name: ${{ env.VERSION }}
+          release_name: Release ${{ env.VERSION }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        id: upload-release-asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GUINNESS_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./palen1x/*-${{ matrix.arch }}.iso
+          asset_name: palen1x-${{ matrix.arch }}.iso
+          asset_content_type: application/octet-stream
